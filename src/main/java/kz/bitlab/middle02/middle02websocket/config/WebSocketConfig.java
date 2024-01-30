@@ -1,5 +1,6 @@
 package kz.bitlab.middle02.middle02websocket.config;
 
+import kz.bitlab.middle02.middle02websocket.handler.ChatWebSocketHandler;
 import kz.bitlab.middle02.middle02websocket.handler.MyWebSocketHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
@@ -13,9 +14,11 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 public class WebSocketConfig implements WebSocketConfigurer {
 
     private final MyWebSocketHandler myWebSocketHandler;
+    private final ChatWebSocketHandler chatWebSocketHandler;
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(myWebSocketHandler, "/chat");
+        registry.addHandler(chatWebSocketHandler, "/webchat");
     }
 }
