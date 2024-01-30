@@ -1,20 +1,29 @@
 package kz.bitlab.middle02.middle02websocket.handler;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import kz.bitlab.middle02.middle02websocket.message.CustomMessage;
 import kz.bitlab.middle02.middle02websocket.websocket.UserSession;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class MyWebSocketHandler extends AbstractWebSocketHandler {
 
     private final Map<String, UserSession> sessions = new ConcurrentHashMap<>();
+    private final ObjectMapper objectMapper;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -43,11 +52,71 @@ public class MyWebSocketHandler extends AbstractWebSocketHandler {
         sendMessageToAll(request);
     }
 
-    private void sendMessageToAll(String message){
-        for(UserSession userSession : sessions.values()){
-            try{
+    @Override
+    public void handleMessage(WebSocketSession session, WebSocketMessage<?> message) throws Exception {
+
+        String payload = message.getPayload().toString();
+        CustomMessage parsedMessage = parseMessage(payload);
+
+        if (parsedMessage != null) {
+            switch (parsedMessage.getType()) {
+                case "CHAT" -> handleChatMessage(session, parsedMessage);
+                case "COMMAND" -> handleCommand(session, parsedMessage);
+            }
+        }
+    }
+
+    private void handleChatMessage(WebSocketSession session, CustomMessage message) {
+        String userName = sessions.get(session.getId()).getUsername();
+        sendMessageToAll(userName + ": " + message.getContent());
+    }
+
+    private void handleCommand(WebSocketSession session, CustomMessage message) {
+        switch (message.getContent()) {
+            case "disconnect" -> {
+                try {
+                    sessions.remove(session.getId());
+                    session.close();
+                } catch (IOException e) {
+                    System.err.println("Error on closing WebSocket Session: " + e.getMessage());
+                }
+            }
+            case "listUsers" -> {
+                String activeUsers = getActiveUsers();
+                sendMessage(session, "Active users : " + activeUsers);
+            }
+        }
+    }
+
+    private void sendMessage(WebSocketSession session, String message){
+        try{
+            session.sendMessage(new TextMessage(message));
+        }catch (IOException e){
+            System.err.println("Error on sending WebSocket message " + e.getMessage());
+        }
+    }
+
+    private String getActiveUsers(){
+        return sessions.values().stream()
+                .map(UserSession::getUsername)
+                .collect(Collectors.joining(", "));
+    }
+
+    private CustomMessage parseMessage(String payload) {
+        try {
+            CustomMessage message = objectMapper.readValue(payload, CustomMessage.class);
+            return message;
+        } catch (JsonProcessingException e) {
+            log.info("Error on parsing message: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private void sendMessageToAll(String message) {
+        for (UserSession userSession : sessions.values()) {
+            try {
                 userSession.getSession().sendMessage(new TextMessage(message));
-            }catch (Exception e){
+            } catch (Exception e) {
                 System.err.println("Error on sending Websocket Message: " + message);
             }
         }
